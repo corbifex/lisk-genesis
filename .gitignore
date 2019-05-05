@@ -1,0 +1,11 @@
+test
+example
+node_modules
+genesis_block.json
+genesis_account.json
+genesis_delegates.json
+private
+.idea
+.DS_Store
+coverage
+junit.xml
