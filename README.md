@@ -1,4 +1,7 @@
 # Lisk Genesis Block Creator
+[![Build Status](https://travis-ci.org/corbifex/lisk-genesis.svg?branch=master)](https://travis-ci.org/corbifex/lisk-genesis)
+[![Coverage Status](https://img.shields.io/codecov/c/github/corbifex/lisk-genesis.svg)](https://codecov.io/gh/corbifex/lisk-genesis/list/master/)
+[![Dependencies Status](https://david-dm.org/corbifex/lisk-genesis.svg)](https://david-dm.org/corbifex/lisk-genesis)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)
 
 ## What is the Lisk Genesis Block Creator
