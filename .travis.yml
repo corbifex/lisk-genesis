@@ -9,8 +9,6 @@ addons:
     - ubuntu-toolchain-r-test
     packages:
     - g++-7
-before_install:
-  - export CC=gcc-7 && CXX=g++-7; fi
 install:
   - npm i -g codecov
   - yarn install
