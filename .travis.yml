@@ -1,7 +1,6 @@
-dist: trusty
 language: node_js
 node_js:
   - "10"
-install
+install:
   - npm install
   - npm run test:ci
