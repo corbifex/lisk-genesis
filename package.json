@@ -33,6 +33,7 @@
     "sodium-native": "^2.4.2"
   },
   "devDependencies": {
+    "codecov": "^3.3.0",
     "jest": "^24.7.1",
     "jest-junit": "^6.4.0"
   }
