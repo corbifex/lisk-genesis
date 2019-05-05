@@ -23,9 +23,11 @@ After installation you can use lisk-genesis. Below you the find possible functio
 ### Construction
 Starting with construction there are two options, use a generated passphrase for the genesis account or use a passphrase of your choosing.
 ```js
+const { GenesisBlock } = require('lisk-genesis');
 const genesisBlock = new GenesisBlock();
 ```
 ```js
+const { GenesisBlock } = require('lisk-genesis');
 const genesisBlock = new GenesisBlock("medal differ embody nose prepare inherit popular allow pizza design youth more");
 ```
 
@@ -67,7 +69,7 @@ genesisBlock.saveGenesisBlock('.', true);
 Optional arguments are `path` default '.' and `saveGenesisAccount` default `true`.
 
 ## Credits
-[Lisk Foundation](https://github.com/LiskHQ/lisk-sdk) providing the basic building blocks for this module
+[Lisk Foundation](https://github.com/LiskHQ/lisk-sdk) for providing the basic building blocks for this module
 
 ## License
 
