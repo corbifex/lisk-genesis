@@ -5,7 +5,10 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)
 
 ## What is the Lisk Genesis Block Creator
-With this module you can easily create your own genesis block for your Lisk dapps or sidechains.
+The genesis block creator gives developers the possibility to customise their
+own genesis block for sidechain and blockchain app prototypes during the Lisk alpha SDK phase.
+
+**This is by no means meant to support the production phase yet.**
 
 ## Installation
 You can install Lisk Genesis by using npm
@@ -39,6 +42,19 @@ genesisBlock.addTransfer({
     amount: "10000000000"
 });
 ```
+It's also possible to add multiple transfer transactions at once
+```js
+genesisBlock.addTransfer([
+    {
+        recipientId: "18254294583320434366L",
+        amount: "10000000000"
+    },
+    {
+        recipientId: "7979485526436233387L",
+        amount: "10000000000"
+    }
+]);
+```
 
 ### Add Delegate
 To add delegates to your genesis block use the addDelegate() function
@@ -48,6 +64,16 @@ genesisBlock.addDelegate({
     username: "genesis_0",
     passphrase: "trigger oblige mom orchard please knife slow mixed afraid until suspect setup"
 });
+```
+It's also possible to add multiple delegates at once
+```js
+genesisBlock.addDelegate([
+    { username: "genesis_0" },
+    { username: "genesis_1" },
+    { username: "genesis_2" },
+    { username: "genesis_3" },
+    { username: "genesis_4" }
+]);
 ```
 
 ### Add Votes

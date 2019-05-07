@@ -10,6 +10,21 @@ try {
     recipientId: "18092005366853123659L",
     amount: "10000090000",
   });
+  genesisBlock.addTransfer([
+    {
+      recipientId: "18092005366853123659L",
+      amount: "100",
+    },
+    {
+      recipientId: "18092005366853123659L",
+      amount: "200",
+    },
+  ]);
+  genesisBlock.addDelegate([
+    { username: "genesis_2" },
+    { username: "genesis_3" },
+    { username: "genesis_4" }
+  ]);
   genesisBlock.addDelegate({
     username: "genesis_0",
     passphrase:

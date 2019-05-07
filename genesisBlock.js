@@ -1,11 +1,25 @@
 "use strict";
 const BigNum = require("@liskhq/bignum");
-const liskPassphrase = require("@liskhq/lisk-passphrase");
-const liskCryptography = require("@liskhq/lisk-cryptography");
-const liskTransactions = require("@liskhq/lisk-transactions");
+const { Mnemonic, validation } = require("@liskhq/lisk-passphrase");
+const {
+  getPrivateAndPublicKeyFromPassphrase,
+  encryptPassphraseWithPassword,
+  hexToBuffer,
+  hash,
+  getAddressAndPublicKeyFromPassphrase,
+  signDataWithPassphrase,
+  getFirstEightBytesReversed
+} = require("@liskhq/lisk-cryptography");
+const {
+  transfer,
+  TransferTransaction,
+  DelegateTransaction,
+  registerDelegate,
+  VoteTransaction,
+  castVotes
+} = require("@liskhq/lisk-transactions");
 const crypto = require("crypto");
 const ByteBuffer = require("bytebuffer");
-const sodium = require("sodium-native");
 const fs = require("fs");
 const _ = require("lodash");
 
@@ -31,6 +45,25 @@ class GenesisBlock {
     this.genesisBlock = { ...defaultGenesisBlock };
     this.transactions = [];
     this.delegates = [];
+    this.password = Mnemonic.generateMnemonic()
+      .split(/\s+/)
+      .slice(0, 5)
+      .join(" ");
+  }
+
+  /**
+   * Add one or multiple transfers
+   *
+   * @param {Array|Object} transfersInput
+   * @param {string} transfersInput[].recipientId - Address to receive funds
+   * @param {string} transfersInput[].amount
+   */
+  addTransfer(transfersInput) {
+    if (_.isArray(transfersInput)) {
+      _.map(transfersInput, transferInput => this._addTransfer(transferInput));
+    } else {
+      this._addTransfer(transfersInput);
+    }
   }
 
   /**
@@ -40,37 +73,41 @@ class GenesisBlock {
    * @param {string} transferInput.recipientId - Address to receive funds
    * @param {string} transferInput.amount
    */
-  addTransfer(transferInput) {
-    transferInput = {
-      type: 0,
-      passphrase: this.passphrase,
-      ...transferInput
-    };
+  _addTransfer(transferInput) {
     if (!transferInput.recipientId || !transferInput.amount) {
-      throw error(
-        `Argument missing for addTransfer(). Use addTransfer({recipientId: "12345L", amount: "10000"});`
-      );
+      throw `Argument missing for addTransfer(). Use addTransfer({recipientId: "12345L", amount: "10000"});`;
     }
-    let baseTransaction = liskTransactions.transfer(transferInput);
-    baseTransaction = {
-      ...baseTransaction,
-      fee: "0",
-      timestamp: 0
-    };
-    delete baseTransaction.signature;
-    baseTransaction.signature = liskTransactions.utils.signTransaction(
-      baseTransaction,
+    let trasferBase = transfer(transferInput);
+    trasferBase.senderPublicKey = getAddressAndPublicKeyFromPassphrase(
       this.passphrase
-    );
+    ).publicKey;
+    trasferBase.timestamp = 0;
 
-    if (
-      liskTransactions.utils.validateTransaction(baseTransaction).errors
-        .length < 2
-    ) {
-      this.transactions.push(baseTransaction);
-      return true;
+    let transferTransaction = new TransferTransaction(trasferBase);
+    delete transferTransaction.signatures;
+    transferTransaction.sign(this.passphrase);
+
+    if (transferTransaction.validate().status !== 1) {
+      throw transferTransaction.validate().errors;
     }
-    throw liskTransactions.utils.validateTransaction(baseTransaction);
+
+    transferTransaction.fee = "0";
+    this.transactions.push(transferTransaction);
+  }
+
+  /**
+   * Add one or multiple delegates
+   *
+   * @param {Array|Object} delegatesInput
+   * @param {string} delegatesInput[].username - Username for delegate
+   * @param {string} [delegatesInput[].passphrase] - Passphrase for delegate account. Use random passphrase when not supplied
+   */
+  addDelegate(delegatesInput) {
+    if (_.isArray(delegatesInput)) {
+      _.map(delegatesInput, delegateInput => this._addDelegate(delegateInput));
+    } else {
+      this._addDelegate(delegatesInput);
+    }
   }
 
   /**
@@ -80,43 +117,44 @@ class GenesisBlock {
    * @param {string} delegateInput.username - Username for delegate
    * @param {string} [delegateInput.passphrase] - Passphrase for delegate account. Use random passphrase when not supplied
    */
-  addDelegate(delegateInput) {
-    delegateInput = {
-      ...delegateInput,
-      type: 2,
-      timestamp: 0,
-      amount: "0"
-    };
+  _addDelegate(delegateInput) {
     if (!delegateInput.passphrase) {
-      delegateInput.passphrase = liskPassphrase.Mnemonic.generateMnemonic();
+      delegateInput.passphrase = Mnemonic.generateMnemonic();
     }
-    this.delegates.push({
-      username: delegateInput.username,
-      passphrase: delegateInput.passphrase
-    });
+
     if (this._getPublicKeys([delegateInput.username], true).length > 0) {
       throw `Can't add '${delegateInput.username}' twice`;
     }
-    let delegateTransaction = liskTransactions.registerDelegate(delegateInput);
-    delegateTransaction = {
-      ...delegateTransaction,
-      fee: "0",
-      timestamp: 0,
-      recipientId: null
-    };
-    delete delegateTransaction.signature;
-    delegateTransaction.signature = liskTransactions.utils.signTransaction(
-      delegateTransaction,
+
+    delegateInput.senderPublicKey = getAddressAndPublicKeyFromPassphrase(
       delegateInput.passphrase
     );
-    if (
-      liskTransactions.utils.validateTransaction(delegateTransaction).errors
-        .length < 3
-    ) {
-      this.transactions.push(delegateTransaction);
-      return true;
+    this.delegates.push({
+      username: delegateInput.username,
+      publicKey: delegateInput.senderPublicKey,
+      passphrase: delegateInput.passphrase,
+      encryptedPassphrase: _.map(
+        encryptPassphraseWithPassword(delegateInput.passphrase, this.password),
+        (v, k) => {
+          return encodeURIComponent(k) + "=" + encodeURIComponent(v);
+        }
+      ).join("&")
+    });
+
+    let delegateTransaction = new DelegateTransaction(
+      registerDelegate(delegateInput)
+    );
+    delete delegateTransaction.signatures;
+    delegateTransaction.timestamp = 0;
+    delegateTransaction.sign(delegateInput.passphrase);
+
+    if (delegateTransaction.validate().status !== 1) {
+      throw delegateTransaction.validate().errors;
     }
-    throw liskTransactions.utils.validateTransaction(delegateTransaction);
+
+    delegateTransaction.fee = "0";
+    delegateTransaction.recipientId = null;
+    this.transactions.push(delegateTransaction);
   }
 
   /**
@@ -129,29 +167,25 @@ class GenesisBlock {
     if (!passphrase || !votes) {
       throw `Argument missing for addVote(). Use addVote({string} passphrase, {Array} Votes).`;
     }
+
     const votePublicKeys = this._getPublicKeys(votes);
-    let voteTransaction = liskTransactions.castVotes({
+    let castTransaction = castVotes({
       passphrase: passphrase,
       votes: votePublicKeys
     });
-    voteTransaction = {
-      ...voteTransaction,
-      fee: "0",
-      timestamp: 0
-    };
-    delete voteTransaction.signature;
-    voteTransaction.signature = liskTransactions.utils.signTransaction(
-      voteTransaction,
-      passphrase
-    );
-    if (
-      liskTransactions.utils.validateTransaction(voteTransaction).errors
-        .length < 2
-    ) {
-      this.transactions.push(voteTransaction);
-      return true;
+    castTransaction.timestamp = 0;
+
+    let voteTransaction = new VoteTransaction(castTransaction);
+    delete voteTransaction.signatures;
+    delete voteTransaction.recipientPublicKey;
+    voteTransaction.sign(passphrase);
+
+    if (voteTransaction.validate().status !== 1) {
+      throw voteTransaction.validate().errors;
     }
-    throw liskTransactions.utils.validateTransaction(voteTransaction);
+    voteTransaction.fee = "0";
+
+    this.transactions.push(voteTransaction);
   }
 
   /**
@@ -163,12 +197,14 @@ class GenesisBlock {
   saveGenesisBlock(genesisBlockPath = ".", saveGenesisAccount = true) {
     try {
       this._createGenesisBlock();
-      if (genesisBlockPath !== "." && !fs.existsSync(genesisBlockPath)) {
+      if (
+        !fs.existsSync(genesisBlockPath) ||
+        !fs.existsSync(`${genesisBlockPath}/private`)
+      ) {
+        fs.mkdirSync(`${genesisBlockPath}`, { recursive: true });
         fs.mkdirSync(`${genesisBlockPath}/private`, { recursive: true });
       }
-      if (!fs.existsSync(`${genesisBlockPath}/private`)) {
-        fs.mkdirSync(`${genesisBlockPath}/private`, { recursive: true });
-      }
+
       fs.writeFileSync(
         `${genesisBlockPath}/genesis_block.json`,
         JSON.stringify(this.genesisBlock, "", 2)
@@ -176,15 +212,21 @@ class GenesisBlock {
       console.log(
         `Genesis block is saved at: ${genesisBlockPath}/genesis_block.json`
       );
+
       if (this.delegates.length > 0) {
+        const genesisDelegates = {
+          delegates: this.delegates,
+          password: this.password
+        };
         fs.writeFileSync(
           `${genesisBlockPath}/private/genesis_delegates.json`,
-          JSON.stringify(this.delegates, "", 2)
+          JSON.stringify(genesisDelegates, "", 2)
         );
         console.log(
           `Genesis delegates are is saved at: ${genesisBlockPath}/private/genesis_delegates.json`
         );
       }
+
       if (saveGenesisAccount) {
         fs.writeFileSync(
           `${genesisBlockPath}/private/genesis_account.json`,
@@ -216,22 +258,17 @@ class GenesisBlock {
    */
   _getAccount(passphrase) {
     if (passphrase) {
-      if (
-        liskPassphrase.validation.getPassphraseValidationErrors(passphrase)
-          .length > 0
-      ) {
-        throw liskPassphrase.validation.getPassphraseValidationErrors(
-          passphrase
-        );
+      if (validation.getPassphraseValidationErrors(passphrase).length > 0) {
+        throw validation.getPassphraseValidationErrors(passphrase);
       }
       this.passphrase = passphrase;
     }
+
     if (!this.passphrase) {
-      this.passphrase = liskPassphrase.Mnemonic.generateMnemonic();
+      this.passphrase = Mnemonic.generateMnemonic();
     }
-    return liskCryptography.getPrivateAndPublicKeyFromPassphrase(
-      this.passphrase
-    );
+
+    return getPrivateAndPublicKeyFromPassphrase(this.passphrase);
   }
 
   /**
@@ -242,13 +279,14 @@ class GenesisBlock {
   _createGenesisBlock() {
     const payloadHash = crypto.createHash("sha256");
     let totalAmount = new BigNum(0);
+
     for (let i = 0; i < this.transactions.length; i++) {
-      const transaction = this.transactions[i];
-      const bytes = this._getBytes(transaction);
+      const bytes = this.transactions[i].getBytes();
       this.genesisBlock.payloadLength += bytes.length;
-      totalAmount = totalAmount.plus(transaction.amount);
+      totalAmount = totalAmount.plus(this.transactions[i].amount);
       payloadHash.update(bytes);
     }
+
     this.genesisBlock.payloadHash = payloadHash.digest().toString("hex");
     this.genesisBlock.totalAmount = totalAmount.toString();
     this.genesisBlock.numberOfTransactions = this.transactions.length;
@@ -256,49 +294,14 @@ class GenesisBlock {
       "hex"
     );
     this.genesisBlock.transactions = this.transactions;
-
-    let hash = crypto
-      .createHash("sha256")
-      .update(this._getBlockBytes(this.genesisBlock))
-      .digest();
     this.genesisBlock.height = 1;
-    this.genesisBlock.blockSignature = this._signBlock(hash).toString("hex");
-    this.genesisBlock.id = this._getBlockId(this.genesisBlock);
-  }
-
-  /**
-   * Private get block id
-   *
-   * @param {Object} block
-   * @return {Object} blockId
-   */
-  _getBlockId(block) {
-    const hash = crypto
-      .createHash("sha256")
-      .update(this._getBlockBytes(block))
-      .digest();
-    const temp = Buffer.alloc(8);
-    for (let i = 0; i < 8; i++) {
-      temp[i] = hash[7 - i];
-    }
-
-    return new BigNum.fromBuffer(temp).toString();
-  }
-
-  /**
-   * Private sign block
-   *
-   * @param {string} hash
-   * @return {string} signature
-   */
-  _signBlock(hash) {
-    const signature = Buffer.alloc(sodium.crypto_sign_BYTES);
-    sodium.crypto_sign_detached(
-      signature,
-      hash,
-      liskCryptography.hexToBuffer(this.genesisAccount.privateKey)
+    this.genesisBlock.blockSignature = signDataWithPassphrase(
+      hash(this._getBlockBytes(this.genesisBlock)),
+      this.passphrase
     );
-    return signature;
+    this.genesisBlock.id = new BigNum.fromBuffer(
+      getFirstEightBytesReversed(hash(this._getBlockBytes(this.genesisBlock)))
+    ).toString();
   }
 
   /**
@@ -331,47 +334,6 @@ class GenesisBlock {
   }
 
   /**
-   * Private get bytes transactions
-   *
-   * @param {Object} transaction
-   * @return {Buffer} transactionBytes
-   */
-  _getBytes(transaction) {
-    const transactionType = Buffer.alloc(
-      liskTransactions.constants.BYTESIZES.TYPE,
-      transaction.type
-    );
-    const transactionTimestamp = Buffer.alloc(1);
-    transactionTimestamp.writeIntLE(1, 0, 1);
-
-    const transactionSenderPublicKey = liskCryptography.hexToBuffer(
-      transaction.senderPublicKey
-    );
-
-    const transactionRecipientID = transaction.recipientId
-      ? liskCryptography
-          .bigNumberToBuffer(
-            transaction.recipientId.slice(0, -1),
-            liskTransactions.constants.BYTESIZES.RECIPIENT_ID
-          )
-          .slice(0, liskTransactions.constants.BYTESIZES.RECIPIENT_ID)
-      : Buffer.alloc(liskTransactions.constants.BYTESIZES.RECIPIENT_ID);
-
-    const transactionAmount = new BigNum(transaction.amount).toBuffer({
-      endian: "little",
-      size: liskTransactions.constants.BYTESIZES.AMOUNT
-    });
-
-    return Buffer.concat([
-      transactionType,
-      transactionTimestamp,
-      transactionSenderPublicKey,
-      transactionRecipientID,
-      transactionAmount
-    ]);
-  }
-
-  /**
    * Private get bytes block
    *
    * @param {Object} block
@@ -395,22 +357,18 @@ class GenesisBlock {
 
     byteBuffer.writeInt(block.payloadLength);
 
-    const payloadHashBuffer = liskCryptography.hexToBuffer(block.payloadHash);
+    const payloadHashBuffer = hexToBuffer(block.payloadHash);
     for (let i = 0; i < payloadHashBuffer.length; i++) {
       byteBuffer.writeByte(payloadHashBuffer[i]);
     }
 
-    const generatorPublicKeyBuffer = liskCryptography.hexToBuffer(
-      block.generatorPublicKey
-    );
+    const generatorPublicKeyBuffer = hexToBuffer(block.generatorPublicKey);
     for (let i = 0; i < generatorPublicKeyBuffer.length; i++) {
       byteBuffer.writeByte(generatorPublicKeyBuffer[i]);
     }
 
     if (block.blockSignature) {
-      const blockSignatureBuffer = liskCryptography.hexToBuffer(
-        block.blockSignature
-      );
+      const blockSignatureBuffer = hexToBuffer(block.blockSignature);
       for (let i = 0; i < blockSignatureBuffer.length; i++) {
         byteBuffer.writeByte(blockSignatureBuffer[i]);
       }
@@ -421,10 +379,6 @@ class GenesisBlock {
 
     return bytes;
   }
-}
-
-function error(e) {
-  return e;
 }
 
 module.exports = GenesisBlock;
