@@ -10,14 +10,16 @@ own genesis block for sidechain and blockchain app prototypes during the Lisk al
 
 **This is by no means meant to support the production phase yet.**
 
+**Now with v2 genesis block support.**
+
 ## Installation
 You can install Lisk Genesis by using npm
 ```
-npm install lisk-genesis
+npm install lisk-genesis@0.1.0
 ```
 Or using yarn
 ```
-yarn add lisk-genesis
+yarn add lisk-genesis@0.1.0
 ```
 
 ## Usage
@@ -27,11 +29,11 @@ After installation you can use lisk-genesis. Below you the find possible functio
 Starting with construction there are two options, use a generated passphrase for the genesis account or use a passphrase of your choosing.
 ```js
 const { GenesisBlock } = require('lisk-genesis');
-const genesisBlock = new GenesisBlock();
+const genesisBlock = new GenesisBlock('applicationName');
 ```
 ```js
 const { GenesisBlock } = require('lisk-genesis');
-const genesisBlock = new GenesisBlock("medal differ embody nose prepare inherit popular allow pizza design youth more");
+const genesisBlock = new GenesisBlock("applicationName", "medal differ embody nose prepare inherit popular allow pizza design youth more");
 ```
 
 ### Add Transfer
@@ -99,7 +101,7 @@ Optional arguments are `path` default '.' and `saveGenesisAccount` default `true
 
 ## License
 
-Copyright © 2019 Corbifex
+Copyright © 2019 - 2020 Corbifex
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
@@ -109,7 +111,7 @@ You should have received a copy of the [GNU General Public License](https://gith
 
 ---
 
-Copyright © 2019 Corbifex
+Copyright © 2019 - 2020 Corbifex
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

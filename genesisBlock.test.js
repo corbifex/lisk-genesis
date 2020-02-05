@@ -2,15 +2,27 @@ const { GenesisBlock } = require("./index");
 const fs = require("fs");
 jest.spyOn(global.console, "log").mockImplementation(() => jest.fn());
 
+test("Constructor class error missing communityIdentifier", () => {
+  expect(() => {
+    new GenesisBlock();
+  }).toThrow();
+});
+
 test("Construct class creates genesis account", () => {
-  const genesisBlock = new GenesisBlock();
+  const genesisBlock = new GenesisBlock('genesisTest');
   expect(genesisBlock._getGenesisAccount().passphrase).toBeDefined();
   expect(genesisBlock._getGenesisAccount().publicKey).toBeDefined();
   expect(genesisBlock._getGenesisAccount().privateKey).toBeDefined();
 });
 
+test("Throw construct with invalid passphrase", () => {
+  expect(() => {
+    const genesisBlock = new GenesisBlock('genesisTest', "trigger");
+  }).toThrow();
+});
+
 test("Construct class with specific genesis account", () => {
-  const genesisBlock = new GenesisBlock(
+  const genesisBlock = new GenesisBlock('genesisTest',
     "trigger oblige mom orchard please knife slow mixed afraid until suspect setup"
   );
   expect(genesisBlock._getGenesisAccount().passphrase).toBe(
@@ -24,14 +36,8 @@ test("Construct class with specific genesis account", () => {
   );
 });
 
-test("Throw construct with invalid passphrase", () => {
-  expect(() => {
-    const genesisBlock = new GenesisBlock("trigger");
-  }).toThrow();
-});
-
 const genesisBlock = new GenesisBlock(
-  "trigger oblige mom orchard please knife slow mixed afraid until suspect setup"
+  "genesisTest", "trigger oblige mom orchard please knife slow mixed afraid until suspect setup"
 );
 test("throw addTransfer with null amount", () => {
   expect(() => {
@@ -45,19 +51,19 @@ test("throw addTransfer with null recipientId", () => {
   }).toThrow();
 });
 
-// test("throw addTransfer with integer amount", () => {
-//   expect(() => {
-//     genesisBlock.addTransfer({ recipientId: "12345L", amount: 123124 });
-//   }).toThrow();
-// });
+test("throw addTransfer with integer amount", () => {
+  expect(() => {
+    genesisBlock.addTransfer({ recipientId: "12345L", amount: 123124 });
+  }).toThrow();
+});
 
 test("Add valid transfer", () => {
   genesisBlock.addTransfer({
     recipientId: "18254294583320434366L",
-    amount: "10000000000"
+    amount: "10000000000",
   });
-  expect(genesisBlock.transactions[0].amount.toString()).toBe("10000000000");
-  expect(genesisBlock.transactions[0]).toHaveProperty(
+  expect(genesisBlock.transactions[0].asset.amount.toString()).toBe("10000000000");
+  expect(genesisBlock.transactions[0].asset).toHaveProperty(
     "recipientId",
     "18254294583320434366L"
   );
@@ -66,7 +72,7 @@ test("Add valid transfer", () => {
     "de4f6165687e9ab809565bd98a87adccfd78381b3732c95072fbdad2fd5c549b"
   );
   expect(genesisBlock.transactions[0]).toHaveProperty("timestamp", 0);
-  expect(genesisBlock.transactions[0]).toHaveProperty("type", 0);
+  expect(genesisBlock.transactions[0]).toHaveProperty("type", 8);
   expect(genesisBlock.transactions[0]).toHaveProperty("fee", "0");
   expect(genesisBlock.transactions[0].recipientPublicKey).not.toBeDefined();
   expect(genesisBlock.transactions[0]).toHaveProperty(
@@ -95,13 +101,10 @@ test("Add passphrased delegate", () => {
     passphrase:
       "rich grief clog quote buzz swing interest delay demand today skill verify"
   });
-  expect(genesisBlock.transactions[2]).toHaveProperty("type", 2);
-  expect(genesisBlock.transactions[2].amount.toString()).toBe("0");
+  expect(genesisBlock.transactions[2]).toHaveProperty("type", 10);
   expect(genesisBlock.transactions[2]).toHaveProperty("timestamp", 0);
   expect(genesisBlock.transactions[2]).toHaveProperty("fee", "0");
-  expect(genesisBlock.transactions[2].asset).toHaveProperty("delegate", {
-    username: "genesis_1"
-  });
+  expect(genesisBlock.transactions[2].asset).toHaveProperty("username", "genesis_1");
   expect(genesisBlock.transactions[2]).toHaveProperty(
     "senderPublicKey",
     "b40a0e099a538df434573e1cd1e07c0e3449de33f3defc624e687b9fa5568227"
@@ -127,17 +130,12 @@ test("Add valid vote", () => {
     "rich grief clog quote buzz swing interest delay demand today skill verify",
     ["genesis_1"]
   );
-  expect(genesisBlock.transactions[3].amount.toString()).toBe("0");
-  expect(genesisBlock.transactions[3]).toHaveProperty(
-    "recipientId",
-    "18092005366853123659L"
-  );
   expect(genesisBlock.transactions[3]).toHaveProperty(
     "senderPublicKey",
     "b40a0e099a538df434573e1cd1e07c0e3449de33f3defc624e687b9fa5568227"
   );
   expect(genesisBlock.transactions[3]).toHaveProperty("timestamp", 0);
-  expect(genesisBlock.transactions[3]).toHaveProperty("type", 3);
+  expect(genesisBlock.transactions[3]).toHaveProperty("type", 11);
   expect(genesisBlock.transactions[3]).toHaveProperty("fee", "0");
   expect(genesisBlock.transactions[3].recipientPublicKey).not.toBeDefined();
   expect(genesisBlock.transactions[3].asset).toHaveProperty("votes", [
@@ -176,7 +174,7 @@ test("Delegate vote string throws", () => {
 
 test("Block creation is valid", () => {
   genesisBlock._createGenesisBlock();
-  expect(genesisBlock.genesisBlock).toHaveProperty("version", 0);
+  expect(genesisBlock.genesisBlock).toHaveProperty("version", 2);
   expect(genesisBlock.genesisBlock).toHaveProperty(
     "totalAmount",
     "10000000000"
@@ -189,8 +187,11 @@ test("Block creation is valid", () => {
   );
   expect(genesisBlock.genesisBlock).toHaveProperty("timestamp", 0);
   expect(genesisBlock.genesisBlock).toHaveProperty("numberOfTransactions", 4);
-  expect(genesisBlock.genesisBlock).toHaveProperty("payloadLength", 551);
-  expect(genesisBlock.genesisBlock).toHaveProperty("previousBlock", null);
+  expect(genesisBlock.genesisBlock).toHaveProperty("payloadLength", 503);
+  expect(genesisBlock.genesisBlock).toHaveProperty("previousBlockId", null);
+  expect(genesisBlock.genesisBlock).toHaveProperty("maxHeightPreviouslyForged", 0);
+  expect(genesisBlock.genesisBlock).toHaveProperty("maxHeightPrevoted", 0);
+  expect(genesisBlock.genesisBlock).toHaveProperty("communityIdentifier", 'genesisTest');
   expect(genesisBlock.genesisBlock).toHaveProperty(
     "generatorPublicKey",
     "de4f6165687e9ab809565bd98a87adccfd78381b3732c95072fbdad2fd5c549b"
@@ -216,10 +217,11 @@ test("Save block works", () => {
   expect(fs.existsSync("./test")).toBe(true);
   expect(fs.existsSync("./test/private")).toBe(true);
   expect(fs.existsSync("./test/genesis_block.json")).toBe(true);
+  expect(fs.existsSync("./test/private/forging_config.json")).toBe(true);
   expect(fs.existsSync("./test/private/genesis_account.json")).toBe(true);
   expect(fs.existsSync("./test/private/genesis_delegates.json")).toBe(true);
   if (fs.existsSync("./test")) {
-    emptyTestDir();
+   emptyTestDir();
   }
 });
 
@@ -227,6 +229,7 @@ function emptyTestDir() {
   if (fs.existsSync("./test")) {
     fs.unlinkSync("./test/private/genesis_delegates.json");
     fs.unlinkSync("./test/private/genesis_account.json");
+    fs.unlinkSync("./test/private/forging_config.json");
     fs.unlinkSync("./test/genesis_block.json");
     fs.rmdirSync("./test/private");
     fs.rmdirSync("./test");
