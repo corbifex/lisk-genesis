@@ -1,7 +1,7 @@
 const { GenesisBlock } = require("./index");
 
 try {
-  const genesisBlock = new GenesisBlock();
+  const genesisBlock = new GenesisBlock('applicationName');
   genesisBlock.addTransfer({
     recipientId: "1140387148230104378L",
     amount: "10000000000",

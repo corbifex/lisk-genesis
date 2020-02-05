@@ -1,9 +1,10 @@
 "use strict";
 const BigNum = require("@liskhq/bignum");
-const { Mnemonic, validation } = require("@liskhq/lisk-passphrase");
+const {Mnemonic, validation} = require("@liskhq/lisk-passphrase");
 const {
   getPrivateAndPublicKeyFromPassphrase,
   encryptPassphraseWithPassword,
+  signData,
   hexToBuffer,
   hash,
   getAddressAndPublicKeyFromPassphrase,
@@ -11,26 +12,30 @@ const {
   getFirstEightBytesReversed
 } = require("@liskhq/lisk-cryptography");
 const {
-  transfer,
   TransferTransaction,
   DelegateTransaction,
-  registerDelegate,
   VoteTransaction,
-  castVotes
+  createResponse,
+  utils,
 } = require("@liskhq/lisk-transactions");
+const transfer = require('./transactions/transfer');
+const delegate = require('./transactions/delegate');
+const vote = require('./transactions/vote');
 const crypto = require("crypto");
 const ByteBuffer = require("bytebuffer");
 const fs = require("fs");
 const _ = require("lodash");
-
+const {getId, validateSignature} = utils;
 const defaultGenesisBlock = {
-  version: 0,
-  totalFee: "0",
-  reward: "0",
+  version: 2,
   timestamp: 0,
-  numberOfTransactions: 0,
+  height: 1,
+  maxHeightPreviouslyForged: 0,
+  maxHeightPrevoted: 0,
+  reward: "0",
+  totalFee: "0",
   payloadLength: 0,
-  previousBlock: null
+  previousBlockId: null,
 };
 
 /**
@@ -40,9 +45,12 @@ const defaultGenesisBlock = {
  * @param {String} valid Lisk passphrase
  */
 class GenesisBlock {
-  constructor(passphrase = null) {
+  constructor(identifier, passphrase = null) {
+    if (_.isEmpty(identifier)) {
+      throw "No `communityIdentifier` given use `const genesisBlock = new GenesisBlock('yourProjectName', [passphrase]);";
+    }
     this.genesisAccount = this._getAccount(passphrase);
-    this.genesisBlock = { ...defaultGenesisBlock };
+    this.genesisBlock = {...defaultGenesisBlock, communityIdentifier: identifier};
     this.transactions = [];
     this.delegates = [];
     this.password = Mnemonic.generateMnemonic()
@@ -142,7 +150,7 @@ class GenesisBlock {
     });
 
     let delegateTransaction = new DelegateTransaction(
-      registerDelegate(delegateInput)
+      delegate(delegateInput)
     );
     delete delegateTransaction.signatures;
     delegateTransaction.timestamp = 0;
@@ -169,7 +177,7 @@ class GenesisBlock {
     }
 
     const votePublicKeys = this._getPublicKeys(votes);
-    let castTransaction = castVotes({
+    let castTransaction = vote({
       passphrase: passphrase,
       votes: votePublicKeys
     });
@@ -201,8 +209,8 @@ class GenesisBlock {
         !fs.existsSync(genesisBlockPath) ||
         !fs.existsSync(`${genesisBlockPath}/private`)
       ) {
-        fs.mkdirSync(`${genesisBlockPath}`, { recursive: true });
-        fs.mkdirSync(`${genesisBlockPath}/private`, { recursive: true });
+        fs.mkdirSync(`${genesisBlockPath}`, {recursive: true});
+        fs.mkdirSync(`${genesisBlockPath}/private`, {recursive: true});
       }
 
       fs.writeFileSync(
@@ -222,6 +230,16 @@ class GenesisBlock {
           `${genesisBlockPath}/private/genesis_delegates.json`,
           JSON.stringify(genesisDelegates, "", 2)
         );
+        const forgingConfig = genesisDelegates.delegates.map(d => {
+          return {
+            encryptedPassphrase: d.encryptedPassphrase,
+            publicKey: d.publicKey.publicKey
+          }
+        });
+        fs.writeFileSync(
+          `${genesisBlockPath}/private/forging_config.json`,
+          JSON.stringify(forgingConfig, "", 2)
+        );
         console.log(
           `Genesis delegates are is saved at: ${genesisBlockPath}/private/genesis_delegates.json`
         );
@@ -237,7 +255,7 @@ class GenesisBlock {
         );
       }
     } catch (e) {
-      throw e;
+      throw this.genesisBlock;
     }
   }
 
@@ -247,7 +265,7 @@ class GenesisBlock {
    * @returns {Object} genesis account
    */
   _getGenesisAccount() {
-    return { ...this.genesisAccount, passphrase: this.passphrase };
+    return {...this.genesisAccount, passphrase: this.passphrase};
   }
 
   /**
@@ -283,17 +301,23 @@ class GenesisBlock {
     for (let i = 0; i < this.transactions.length; i++) {
       const bytes = this.transactions[i].getBytes();
       this.genesisBlock.payloadLength += bytes.length;
-      totalAmount = totalAmount.plus(this.transactions[i].amount);
+      if (this.transactions[i].asset && this.transactions[i].asset.amount) {
+        totalAmount = totalAmount.plus(this.transactions[i].asset.amount);
+      }
       payloadHash.update(bytes);
     }
-
     this.genesisBlock.payloadHash = payloadHash.digest().toString("hex");
     this.genesisBlock.totalAmount = totalAmount.toString();
     this.genesisBlock.numberOfTransactions = this.transactions.length;
     this.genesisBlock.generatorPublicKey = this.genesisAccount.publicKey.toString(
       "hex"
     );
-    this.genesisBlock.transactions = this.transactions;
+    this.genesisBlock.transactions = this.transactions.map(tx => {
+      let txData = { ...tx.toJSON() };
+      delete txData.fee;
+      delete txData.senderId;
+      return txData;
+    });
     this.genesisBlock.height = 1;
     this.genesisBlock.blockSignature = signDataWithPassphrase(
       hash(this._getBlockBytes(this.genesisBlock)),
@@ -312,7 +336,7 @@ class GenesisBlock {
    * @return {Array} publicKeys
    */
   _getPublicKeys(usernames, ignoreThrow = false) {
-    if (!usernames || typeof usernames !== "object" || usernames.length === 0) {
+    if (!usernames || !_.isArray(usernames) || usernames.length === 0) {
       throw `No delegate usernames found to vote. \n
       Please use as follows: genesisBlock.addVote(passphrase, ["username_1", "username_2"]);`;
     }
@@ -321,7 +345,7 @@ class GenesisBlock {
         try {
           return _.find(
             this.transactions,
-            tx => tx.type === 2 && tx.asset.delegate.username === username
+            tx => tx.type === 10 && tx.asset.username === username
           ).senderPublicKey;
         } catch (e) {
           if (!ignoreThrow) {
@@ -380,5 +404,85 @@ class GenesisBlock {
     return bytes;
   }
 }
+
+const validate = function () {
+  const errors = [...this._validateSchema(), ...this.validateAsset()];
+  if (errors.length > 0) {
+    return createResponse(this.id, errors);
+  }
+
+  const transactionBytes = this.getBasicBytes();
+
+  this._id = getId(this.getBytes());
+
+  const {
+    valid: signatureValid,
+    error: verificationError,
+  } = validateSignature(
+    this.senderPublicKey,
+    this.signature,
+    transactionBytes,
+    this.id,
+  );
+
+  if (!signatureValid && verificationError) {
+    errors.push(verificationError);
+  }
+
+  if (this.type !== this.constructor.TYPE) {
+    errors.push(
+      new TransactionError(
+        `Invalid type`,
+        this.id,
+        '.type',
+        this.type,
+        this.constructor.TYPE,
+      ),
+    );
+  }
+
+  return createResponse(this.id, errors);
+};
+
+const sign = function (passphrase, secondPassphrase = null) {
+  const {publicKey} = getAddressAndPublicKeyFromPassphrase(passphrase);
+
+  if (this._senderPublicKey !== '' && this._senderPublicKey !== publicKey) {
+    throw new Error(
+      'Transaction senderPublicKey does not match public key from passphrase',
+    );
+  }
+
+  this._senderPublicKey = publicKey;
+
+  this._signature = undefined;
+  this._signSignature = undefined;
+
+  this._signature = signData(
+    hash(this.getBytes()),
+    passphrase,
+  );
+
+  if (secondPassphrase) {
+    this._signSignature = signData(
+      hash(
+        Buffer.concat([
+          this.getBytes(),
+          hexToBuffer(this._signature),
+        ]),
+      ),
+      secondPassphrase,
+    );
+  }
+
+  this._id = getId(this.getBytes());
+};
+
+TransferTransaction.prototype.validate = validate;
+DelegateTransaction.prototype.validate = validate;
+VoteTransaction.prototype.validate = validate;
+TransferTransaction.prototype.sign = sign;
+DelegateTransaction.prototype.sign = sign;
+VoteTransaction.prototype.sign = sign;
 
 module.exports = GenesisBlock;
