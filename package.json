@@ -1,6 +1,6 @@
 {
   "name": "lisk-genesis",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Lisk Genesis Block Creator",
   "author": "Corbifex",
   "license": "GPL-3.0",
@@ -29,7 +29,9 @@
     "@liskhq/lisk-transactions": "2.1.0-alpha.5",
     "bytebuffer": "^5.0.1",
     "handlebars": "^4.7.3",
-    "lodash": "^4.17.15"
+    "lodash": "^4.17.15",
+    "mixin-deep": "^2.0.1",
+    "set-value": "^3.0.1"
   },
   "devDependencies": {
     "codecov": "^3.3.0",
