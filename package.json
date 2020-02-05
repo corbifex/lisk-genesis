@@ -1,6 +1,6 @@
 {
   "name": "lisk-genesis",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "description": "Lisk Genesis Block Creator",
   "author": "Corbifex",
   "license": "GPL-3.0",
