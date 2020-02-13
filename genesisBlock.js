@@ -215,7 +215,7 @@ class GenesisBlock {
 
       fs.writeFileSync(
         `${genesisBlockPath}/genesis_block.json`,
-        JSON.stringify(this.genesisBlock, "", 2)
+        JSON.stringify(this.genesisBlock, null, 2)
       );
       console.log(
         `Genesis block is saved at: ${genesisBlockPath}/genesis_block.json`
@@ -228,7 +228,7 @@ class GenesisBlock {
         };
         fs.writeFileSync(
           `${genesisBlockPath}/private/genesis_delegates.json`,
-          JSON.stringify(genesisDelegates, "", 2)
+          JSON.stringify(genesisDelegates, null, 2)
         );
         const forgingConfig = genesisDelegates.delegates.map(d => {
           return {
@@ -238,7 +238,7 @@ class GenesisBlock {
         });
         fs.writeFileSync(
           `${genesisBlockPath}/private/forging_config.json`,
-          JSON.stringify(forgingConfig, "", 2)
+          JSON.stringify(forgingConfig, null, 2)
         );
         console.log(
           `Genesis delegates are is saved at: ${genesisBlockPath}/private/genesis_delegates.json`
@@ -248,7 +248,7 @@ class GenesisBlock {
       if (saveGenesisAccount) {
         fs.writeFileSync(
           `${genesisBlockPath}/private/genesis_account.json`,
-          JSON.stringify(this._getGenesisAccount(), "", 2)
+          JSON.stringify(this._getGenesisAccount(), null, 2)
         );
         console.log(
           `Genesis account information is saved at: ${genesisBlockPath}/private/genesis_account.json`
